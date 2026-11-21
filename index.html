@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Calcula tu nota definitiva ponderada y consulta tu historial de cálculos.">
+  <title>Notas Definitivas</title>
+
+  <!-- Favicon inline (SVG en data URI): evita la petición automática a /favicon.ico,
+       que daría 404 y ensuciaría la consola (criterio de aceptación HU-11). -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%231d4ed8'/%3E%3Ctext x='50' y='68' font-size='52' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3EN%3C/text%3E%3C/svg%3E">
+
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- type="module":
+       - habilita import/export entre archivos JS (arquitectura modular);
+       - activa el modo estricto automáticamente;
+       - se ejecuta DIFERIDO (después de parsear el HTML), por eso puede ir en <head>
+         y no necesitamos esperar DOMContentLoaded.
+       OJO: los módulos NO funcionan abriendo el archivo con file://, requieren un servidor HTTP. -->
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+  <header class="cabecera-app">
+    <h1 class="cabecera-app__titulo">Notas Definitivas</h1>
+  </header>
+
+  <main class="contenedor">
+
+    <!-- Mensaje para navegadores sin JavaScript: la app depende 100 % de JS. -->
+    <noscript>
+      <p class="alerta">Esta aplicación necesita JavaScript activado para funcionar.</p>
+    </noscript>
+
+    <!-- ===========================================================
+         ALERTA GLOBAL
+         role="alert" implica aria-live="assertive": los lectores de pantalla
+         anuncian el texto en cuanto cambia. Se usa para errores generales
+         (suma de porcentajes, IndexedDB no disponible – EC-13).
+         =========================================================== -->
+    <div id="alerta" class="alerta" role="alert" hidden></div>
+
+    <!-- ===========================================================
+         ESTADO A — VISTA DE ACCESO
+         =========================================================== -->
+    <section id="vista-acceso" class="tarjeta" aria-labelledby="titulo-acceso">
+      <h2 id="titulo-acceso">Ingresar</h2>
+      <p class="ayuda">
+        Usa solo tu número de documento. Si es tu primera vez, te registramos automáticamente.
+      </p>
+
+      <!-- novalidate: desactiva las burbujas nativas del navegador; la validación
+           la hacemos nosotros en JS para controlar los mensajes exactos de los specs. -->
+      <form id="form-acceso" class="formulario" novalidate>
+        <div class="campo">
+          <label for="documento">Número de documento</label>
+          <!-- type="text" + inputmode="numeric": teclado numérico en móvil,
+               pero el valor se conserva como string (ver EC-11).
+               Sin maxlength a propósito: si se escribe de más, queremos mostrar
+               el mensaje de error, no truncar el valor en silencio. -->
+          <input
+            id="documento"
+            name="documento"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            required
+            aria-describedby="error-documento">
+          <!-- Contenedor del mensaje de error; vacío = oculto por CSS (:empty). -->
+          <p id="error-documento" class="mensaje-error" aria-live="polite"></p>
+        </div>
+
+        <button id="btn-ingresar" type="submit" class="boton boton--primario">Ingresar</button>
+      </form>
+    </section>
+
+    <!-- ===========================================================
+         PANEL (visible en Estados B y C)
+         Todo lo que está dentro hereda su visibilidad: si el panel tiene
+         `hidden`, nada de su interior se ve (historial incluido).
+         =========================================================== -->
+    <section id="vista-panel" class="panel" aria-labelledby="titulo-panel" hidden>
+
+      <header class="panel__encabezado">
+        <h2 id="titulo-panel" class="visualmente-oculto">Panel del estudiante</h2>
+        <p class="panel__sesion">
+          Sesión: <strong id="documento-activo"></strong>
+        </p>
+        <button id="btn-salir" type="button" class="boton boton--secundario">Cerrar sesión</button>
+      </header>
+
+      <!-- -------------------------------------------------------
+           ESTADO B — CONFIGURACIÓN DE LA EVALUACIÓN
+           Agrupa cantidad + filas + suma + calcular para poder
+           ocultarlos juntos al pasar al Estado C.
+           ------------------------------------------------------- -->
+      <section id="vista-configuracion" class="tarjeta" aria-labelledby="titulo-config">
+        <h2 id="titulo-config">Configura tu evaluación</h2>
+
+        <!-- Paso 1: cantidad de notas -->
+        <form id="form-cantidad" class="formulario" novalidate>
+          <label for="cantidad-notas">¿Cuántas notas tiene la asignatura?</label>
+          <div class="control-en-linea">
+            <input
+              id="cantidad-notas"
+              name="cantidad-notas"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              max="20"
+              step="1"
+              required
+              aria-describedby="error-cantidad">
+            <button id="btn-generar" type="submit" class="boton boton--primario">Generar campos</button>
+          </div>
+          <p id="error-cantidad" class="mensaje-error" aria-live="polite"></p>
+        </form>
+
+        <!-- Paso 2: notas y porcentajes (oculto hasta pulsar "Generar") -->
+        <form id="form-notas" class="formulario" novalidate hidden>
+          <!-- Aquí se insertarán dinámicamente las filas (Fase 4). -->
+          <div id="contenedor-notas" class="lista-notas"></div>
+
+          <!-- Indicador en vivo de la suma (HU-06). aria-live="polite" lo anuncia
+               sin interrumpir lo que el usuario está escribiendo. -->
+          <p id="suma-porcentajes" class="suma" aria-live="polite"></p>
+
+          <!-- Deshabilitado por defecto: solo se habilita cuando todo es válido. -->
+          <button id="btn-calcular" type="submit" class="boton boton--primario boton--ancho" disabled>
+            Calcular nota definitiva
+          </button>
+        </form>
+      </section>
+
+      <!-- -------------------------------------------------------
+           ESTADO C — RESULTADO
+           ------------------------------------------------------- -->
+      <section id="vista-resultado" class="tarjeta resultado" aria-labelledby="titulo-resultado" hidden>
+        <!-- tabindex="-1": permite moverle el foco por código (no por Tab) para
+             que el lector de pantalla anuncie el resultado al llegar aquí. -->
+        <h2 id="titulo-resultado" tabindex="-1">Resultado</h2>
+        <p class="resultado__etiqueta">Nota definitiva</p>
+        <p id="nota-definitiva" class="resultado__nota">—</p>
+        <!-- El estado SIEMPRE lleva texto ("Aprobado"/"Reprobado"), el color es apoyo. -->
+        <p id="estado-academico" class="estado"></p>
+        <!-- Aviso no bloqueante si falla el guardado en IndexedDB (EC-14). -->
+        <p id="aviso-guardado" class="aviso" hidden></p>
+        <button id="btn-nuevo" type="button" class="boton boton--primario">Nuevo cálculo</button>
+      </section>
+
+      <!-- -------------------------------------------------------
+           HISTORIAL (visible en B y C)
+           ------------------------------------------------------- -->
+      <section id="historial" class="tarjeta" aria-labelledby="titulo-historial">
+        <h2 id="titulo-historial">Historial</h2>
+        <p id="historial-vacio" class="ayuda">Aún no tienes cálculos guardados.</p>
+        <!-- <ol>: el orden importa (más reciente → más antiguo). -->
+        <ol id="lista-historial" class="historial__lista"></ol>
+      </section>
+
+    </section>
+  </main>
+
+  <!-- =============================================================
+       PLANTILLA DE FILA DE NOTA (se usará en la Fase 4)
+       <template> no se renderiza ni ejecuta: es un "molde" que JS clona
+       con template.content.cloneNode(true). Así el marcado vive en el HTML
+       y no en strings dentro del JavaScript.
+       Los atributos id / for / aria-describedby se asignan al clonar,
+       porque cada fila necesita ids únicos (nota-1, nota-2, ...).
+       ============================================================= -->
+  <template id="plantilla-fila-nota">
+    <fieldset class="fila-nota">
+      <legend class="fila-nota__titulo">Nota <span data-rol="numero"></span></legend>
+
+      <div class="campo">
+        <label data-rol="label-valor">Valor (0.0 – 5.0)</label>
+        <input data-rol="valor" type="number" inputmode="decimal" step="0.01" min="0" max="5" required>
+        <p data-rol="error-valor" class="mensaje-error" aria-live="polite"></p>
+      </div>
+
+      <div class="campo">
+        <label data-rol="label-porcentaje">Porcentaje (%)</label>
+        <input data-rol="porcentaje" type="number" inputmode="decimal" step="0.01" min="0.01" max="100" required>
+        <p data-rol="error-porcentaje" class="mensaje-error" aria-live="polite"></p>
+      </div>
+    </fieldset>
+  </template>
+
+</body>
+</html>

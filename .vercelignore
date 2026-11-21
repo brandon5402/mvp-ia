@@ -1,0 +1,9 @@
+# Archivos que NO se suben a Vercel (solo sirven en desarrollo).
+# Configuración local de la vista previa de Claude Code.
+.claude/
+# Documentación (guía del laboratorio): no forma parte del sitio público.
+*.md
+# Archivos de sistema operativo y editores.
+.DS_Store
+Thumbs.db
+.vscode/

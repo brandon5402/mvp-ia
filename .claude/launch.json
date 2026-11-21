@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "estatico",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5500"],
+      "port": 5500
+    },
+    {
+      "name": "estatico-headers",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-I",
+        "C:\\Users\\brand\\AppData\\Local\\Temp\\claude\\347bd23ef684aa34\\52fef87e-d1ba-4aa7-9ac2-ae580cb2b3a6\\scratchpad\\servidor_con_headers.py",
+        "C:\\Users\\brand\\Desktop\\MVP calificaciones",
+        "5501"
+      ],
+      "port": 5501
+    }
+  ]
+}
